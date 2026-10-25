@@ -42,7 +42,10 @@ function getTheme() {
 }
 
 function applyTheme(theme) {
-  document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
+  const dark = theme === 'dark';
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  const color = document.querySelector('meta[name="theme-color"]');
+  if (color) color.setAttribute('content', dark ? '#121212' : '#f4f4f4');
   try { localStorage.setItem('flamme-theme', theme); } catch { /* ignore */ }
 }
 

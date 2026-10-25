@@ -70,7 +70,8 @@ body {
   line-height: 1.4;
 }
 button, input { font: inherit; color: inherit; }
-button { cursor: pointer; background: none; border: 0; padding: 0; }
+button { cursor: pointer; background: none; border: 0; padding: 0; touch-action: manipulation; }
+html { -webkit-text-size-adjust: 100%; }
 button:disabled { opacity: 0.6; cursor: wait; }
 img, video { max-width: 100%; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -189,7 +190,8 @@ input::placeholder { color: var(--placeholder); }
   width: 100%;
   text-align: center;
   border-radius: 6px;
-  padding: 11px 14px;
+  padding: 12px 14px;
+  min-height: 44px;
   font-weight: 600;
   margin-top: 8px;
 }
@@ -266,7 +268,7 @@ input::placeholder { color: var(--placeholder); }
   background: var(--header-bg);
   border-bottom: 1px solid var(--line);
 }
-.text-back { color: var(--accent); font-size: 15px; padding: 8px 4px; }
+.text-back { color: var(--accent); font-size: 15px; padding: 8px 4px; min-height: 44px; }
 .streak-top h1 {
   flex: 1;
   font-size: 18px;
@@ -605,13 +607,42 @@ input::placeholder { color: var(--placeholder); }
 }
 
 @media (min-width: 800px) {
-  body { background: var(--desktop-bg); }
-  #stage {
-    width: min(440px, 100%);
-    height: 100%;
-    margin: 0 auto;
-    background: var(--bg);
-    border-left: 1px solid var(--stage-line);
-    border-right: 1px solid var(--stage-line);
+  body { background: var(--bg); }
+  #stage { width: 100%; height: 100%; background: var(--bg); }
+  #view-auth {
+    display: grid;
+    align-content: center;
+    justify-items: center;
+  }
+  #view-auth > * { width: min(420px, 100%); }
+  #view-home {
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    column-gap: 28px;
+    align-content: start;
+    width: min(980px, calc(100% - 48px));
+    left: 0;
+    right: 0;
+    margin-left: auto;
+    margin-right: auto;
+    padding: 28px 0 32px;
+  }
+  #view-home .top { grid-column: 1 / -1; }
+  #view-home #task-card { grid-column: 1; grid-row: 2; }
+  #view-home .home-actions { grid-column: 1; grid-row: 3; margin-top: 0; }
+  #view-home #streak-list { grid-column: 2; grid-row: 2 / span 2; }
+  #view-streak .streak-top,
+  #view-streak .scroll,
+  #view-streak .dock {
+    width: min(880px, 100%);
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .pair { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+  .overlay { align-items: center; }
+  .sheet {
+    width: min(480px, calc(100% - 48px));
+    border-radius: 12px;
   }
 }
