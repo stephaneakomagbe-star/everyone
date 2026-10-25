@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#f4f4f4">
+  <meta name="robots" content="noindex">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Everyone</title>
+  <link rel="icon" href="/favicon.svg?v=8" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="/css/app.css?v=enter6">
+</head>
+<body>
+  <div id="stage">
+    <div id="app">
+      <section id="view-boot" class="view view-center">
+        <div class="brand-mark" aria-hidden="true"><img src="/favicon.svg?v=8" alt=""></div>
+        <p class="boot-name">Everyone</p>
+      </section>
+
+      <section id="view-auth" class="view" hidden>
+        <div class="auth-hero">
+          <div class="brand-mark" aria-hidden="true"><img src="/favicon.svg?v=8" alt=""></div>
+          <h1 id="auth-title">Créer un compte</h1>
+          <p class="lede">Un groupe, une photo ou une vidéo chacun, avant minuit. Tout le monde dépose : la série continue.</p>
+        </div>
+        <form id="form-auth">
+          <label>Prénom
+            <input id="name" name="name" autocomplete="nickname" maxlength="24" required placeholder="Ton prénom">
+          </label>
+          <label>Code secret
+            <input id="password" name="password" type="password" minlength="4" maxlength="64" autocomplete="new-password" required>
+          </label>
+          <p class="hint" id="password-hint">4 caractères minimum. Il sert à retrouver ton compte.</p>
+          <button class="btn btn-primary" id="auth-submit" type="submit">Créer mon espace</button>
+          <button class="btn btn-ghost" id="auth-switch" type="button" data-action="auth-switch">J’ai déjà un compte</button>
+        </form>
+        <p class="hint trust">Un petit groupe, jusqu’à 12. Rien n’est public.</p>
+      </section>
+
+      <section id="view-home" class="view" hidden>
+        <header class="top">
+          <div>
+            <h1 id="home-hello"></h1>
+          </div>
+          <button id="btn-profile" class="avatar" type="button" data-action="show-profile" aria-label="Profil"></button>
+        </header>
+        <div id="task-card"></div>
+        <div id="streak-list"></div>
+        <div class="home-actions">
+          <button class="btn btn-primary" type="button" data-action="show-new">Nouveau groupe</button>
+          <button class="btn btn-ghost" type="button" data-action="show-join">J’ai un code</button>
+        </div>
+      </section>
+
+      <section id="view-streak" class="view" hidden>
+        <div class="streak-top">
+          <button class="text-back" type="button" data-action="back-home">Retour</button>
+          <h1 id="streak-heading"></h1>
+        </div>
+        <div id="streak-scroll" class="scroll"></div>
+        <div id="streak-dock" class="dock"></div>
+      </section>
+
+      <section id="view-capture" class="view" hidden>
+        <div id="cam-live">
+          <video id="cam" autoplay playsinline muted></video>
+          <div class="cam-top">
+            <button class="icon-btn" type="button" data-action="close-capture" aria-label="Fermer">
+              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+            <p id="cam-prompt"></p>
+            <button class="icon-btn" id="flip-cam" type="button" data-action="flip-camera" aria-label="Retourner la caméra">
+              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 12a8 8 0 0 1 13.5-5.8L20 8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M20 4v4h-4M20 12a8 8 0 0 1-13.5 5.8L4 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 20v-4h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+          <p id="rec-time" class="rec-time" hidden>0:00</p>
+          <p id="cam-error" class="cam-error" hidden></p>
+          <div id="device-actions" hidden>
+            <label class="btn btn-primary" for="camera-input">Prendre une photo</label>
+            <label class="btn btn-ghost" for="camera-back">Caméra arrière</label>
+            <label class="btn btn-ghost" for="video-input">Filmer</label>
+          </div>
+          <div id="mode-switch" class="modes" role="group" aria-label="Photo ou vidéo">
+            <button type="button" id="mode-photo" data-action="mode-photo" aria-pressed="true">Photo</button>
+            <button type="button" id="mode-video" data-action="mode-video" aria-pressed="false">Vidéo</button>
+          </div>
+          <div class="cam-bar">
+            <label class="icon-btn" for="file-input" aria-label="Choisir dans la galerie">
+              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><path d="M3 16l5-4 4 3 3-2 6 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+            </label>
+            <button class="shutter" id="shutter" type="button" data-action="shutter" aria-label="Prendre la photo"></button>
+            <span class="icon-spacer"></span>
+          </div>
+        </div>
+        <div id="cam-review" hidden>
+          <img id="preview" alt="Aperçu de ta photo">
+          <video id="preview-video" playsinline loop muted hidden></video>
+          <div class="review-bar">
+            <div id="filters" class="filters" hidden></div>
+            <p id="replace-note" class="hint" hidden>Elle remplace celle déjà déposée aujourd’hui.</p>
+            <input id="caption" maxlength="80" placeholder="Un mot, si tu veux" autocomplete="off">
+            <div class="row-btns">
+              <button class="btn btn-ghost" type="button" data-action="retake">Reprendre</button>
+              <button class="btn btn-primary" id="btn-send" type="button" data-action="send-drop">Déposer</button>
+            </div>
+          </div>
+        </div>
+        <canvas id="snap" hidden></canvas>
+        <input id="camera-input" type="file" accept="image/*" capture="user" hidden>
+        <input id="camera-back" type="file" accept="image/*" capture="environment" hidden>
+        <input id="video-input" type="file" accept="video/*" capture="environment" hidden>
+        <input id="file-input" type="file" accept="image/*,video/*" hidden>
+      </section>
+
+      <div id="overlay" class="overlay" hidden>
+        <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+          <div class="grabber"></div>
+          <button class="icon-btn sheet-close" type="button" data-action="close-sheet" aria-label="Fermer">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+          <div id="sheet-body"></div>
+        </div>
+      </div>
+
+      <div id="lightbox" hidden>
+        <button class="icon-btn light-close" type="button" data-action="close-light" aria-label="Fermer">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <div id="light-media"></div>
+        <p id="light-caption"></p>
+      </div>
+
+      <p id="toast" hidden></p>
+    </div>
+  </div>
+  <noscript><p>Everyone a besoin de JavaScript.</p></noscript>
+  <script src="/js/app.js?v=enter6" defer></script>
+</body>
+</html>
