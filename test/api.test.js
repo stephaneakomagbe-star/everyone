@@ -95,6 +95,25 @@ test('un groupe dépose, la flamme s’allume, un étranger reste dehors', async
     assert.equal(seenByMila.data.count, 1);
     assert.equal(seenByMila.data.partner.name, 'Noah');
     assert.ok(seenByMila.data.prompt.title);
+    assert.ok(seenByMila.data.cover);
+    assert.equal(seenByMila.data.recent.length, 2);
+    const todayCell = seenByMila.data.month.find((day) => day.day === seenByMila.data.today);
+    assert.equal(todayCell.state, 'lit');
+    assert.ok(seenByMila.data.month.length >= 28);
+
+    const noahDrop = second.data.streak.youDrop.id;
+    const reacted = await call(`/api/drops/${noahDrop}/reaction`, { method: 'POST', cookie: cookieMila });
+    assert.equal(reacted.status, 200);
+    const noahCard = reacted.data.streak.members.find((member) => member.name === 'Noah');
+    assert.equal(noahCard.drop.reactions.length, 1);
+    assert.equal(noahCard.drop.reactions[0].name, 'Mila');
+    assert.equal(noahCard.drop.reactions[0].you, true);
+    const own = await call(`/api/drops/${seenByMila.data.youDrop.id}/reaction`, { method: 'POST', cookie: cookieMila });
+    assert.equal(own.status, 400);
+    const cleared = await call(`/api/drops/${noahDrop}/reaction`, { method: 'POST', cookie: cookieMila });
+    assert.equal(cleared.status, 200);
+    const noahAgain = cleared.data.streak.members.find((member) => member.name === 'Noah');
+    assert.equal(noahAgain.drop.reactions.length, 0);
 
     const replaced = await upload(cookieMila, streakId, 'mieux');
     assert.equal(replaced.status, 201);
@@ -121,6 +140,8 @@ test('un groupe dépose, la flamme s’allume, un étranger reste dehors', async
     const cookieSam = cookieOf(sam.res);
     const hidden = await call(`/api/streaks/${streakId}`, { cookie: cookieSam });
     assert.equal(hidden.status, 404);
+    const outsideReact = await call(`/api/drops/${noahDrop}/reaction`, { method: 'POST', cookie: cookieSam });
+    assert.equal(outsideReact.status, 404);
     const stolen = await fetch(`${base}/api/media/${second.data.streak.youDrop.id}`, {
       headers: { cookie: cookieSam },
     });

@@ -137,13 +137,51 @@ function publicUser(user) {
   return { id: user.id, name: user.name };
 }
 
-function brief(drop) {
+function brief(drop, db, viewerId) {
   if (!drop) return null;
+  const reactions = [];
+  for (const userId of drop.reactions || []) {
+    const user = db.users.find((item) => item.id === userId);
+    if (!user) continue;
+    reactions.push({ name: user.name, you: userId === viewerId });
+  }
   return {
     id: drop.id,
     kind: drop.mime.startsWith('video/') ? 'video' : 'image',
     caption: drop.caption || '',
+    reactions,
   };
+}
+
+function latestGroupPhoto(byDay) {
+  const days = Object.keys(byDay).sort().reverse();
+  for (const day of days) {
+    const images = Object.values(byDay[day] || [])
+      .filter((drop) => drop && !String(drop.mime || '').startsWith('video/'))
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    if (images.length) return images[0].id;
+  }
+  return null;
+}
+
+function recentShots(byDay, members) {
+  const names = new Map((members || []).map((member) => [member.id, member.name]));
+  const days = Object.keys(byDay).sort().reverse();
+  const shots = [];
+  for (const day of days) {
+    const drops = Object.entries(byDay[day] || {})
+      .filter(([, drop]) => drop && !String(drop.mime || '').startsWith('video/'))
+      .sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
+    for (const [userId, drop] of drops) {
+      shots.push({
+        id: drop.id,
+        name: names.get(userId) || '',
+        day,
+      });
+      if (shots.length >= 4) return shots;
+    }
+  }
+  return shots;
 }
 
 function latestImageId(byDay, userId) {
@@ -214,6 +252,7 @@ function context(db, streak, userId, today) {
     .filter(Boolean);
   const partner = members.find((user) => user.id !== userId) || null;
   return {
+    db,
     streak,
     userId,
     today,
@@ -225,18 +264,18 @@ function context(db, streak, userId, today) {
 }
 
 function summarize(ctx) {
-  const { streak, userId, today, byDay, partner, isComplete } = ctx;
+  const { db, streak, userId, today, byDay, partner, isComplete } = ctx;
   const count = currentStreak(isComplete, today);
   const best = bestStreak(isComplete, streak.createdDay, today);
   const members = ctx.members || [];
-  const youDrop = brief(byDay[today]?.[userId]);
-  const partnerDrop = partner ? brief(byDay[today]?.[partner.id]) : null;
+  const youDrop = brief(byDay[today]?.[userId], db, userId);
+  const partnerDrop = partner ? brief(byDay[today]?.[partner.id], db, userId) : null;
   const todayComplete = isComplete(today);
   const people = members.map((member) => ({
     id: member.id,
     name: member.name,
     posted: Boolean(byDay[today]?.[member.id]),
-    drop: brief(byDay[today]?.[member.id]),
+    drop: brief(byDay[today]?.[member.id], db, userId),
     photo: latestImageId(byDay, member.id),
   }));
   const youFirst = [
@@ -273,6 +312,8 @@ function summarize(ctx) {
     partnerDrop,
     youPhoto: latestImageId(byDay, userId),
     partnerPhoto: partner ? latestImageId(byDay, partner.id) : null,
+    cover: latestGroupPhoto(byDay),
+    recent: recentShots(byDay, members),
     memberCount: streak.memberIds.length,
   };
 }
@@ -291,8 +332,22 @@ function describeDay({ day, today, byDay, memberIds }) {
   return { day, state: 'missed', label: 'Manqué' };
 }
 
+function monthDays(today, createdDay, byDay, memberIds) {
+  const [year, month] = today.split('-').map(Number);
+  const last = new Date(year, month, 0).getDate();
+  const pad = (n) => String(n).padStart(2, '0');
+  const days = [];
+  for (let date = 1; date <= last; date += 1) {
+    const day = `${year}-${pad(month)}-${pad(date)}`;
+    if (day > today) days.push({ day, state: 'future', label: '' });
+    else if (day < createdDay) days.push({ day, state: 'before', label: '' });
+    else days.push(describeDay({ day, today, byDay, memberIds }));
+  }
+  return days;
+}
+
 function detail(ctx, summary) {
-  const { streak, userId, today, byDay, members, isComplete } = ctx;
+  const { db, streak, userId, today, byDay, members, isComplete } = ctx;
   const memberIds = streak.memberIds;
   const ordered = [
     ...members.filter((member) => member.id === userId),
@@ -314,10 +369,11 @@ function detail(ctx, summary) {
       complete: isComplete(day),
       drops: ordered.map((member) => ({
         name: member.name,
-        ...(brief(byDay[day][member.id]) || {}),
+        ...(brief(byDay[day][member.id], db, userId) || {}),
       })),
     }));
-  return { ...summary, dots, history, prompt: promptFor(today) };
+  const month = monthDays(today, streak.createdDay, byDay, memberIds);
+  return { ...summary, dots, history, month, prompt: promptFor(today) };
 }
 
 function auth(req, res, next) {
@@ -534,6 +590,28 @@ app.post('/api/streaks/:id/drops', auth, (req, res, next) => {
   const streak = db.streaks.find((item) => item.id === req.params.id);
   const ctx = context(db, streak, req.user.id, today);
   res.status(201).json({ streak: detail(ctx, summarize(ctx)) });
+}));
+
+app.post('/api/drops/:id/reaction', auth, route(async (req, res) => {
+  if (!/^[a-f0-9]{16}$/.test(req.params.id)) fail(404, 'Photo introuvable.');
+  const today = serverToday();
+  const streakId = await mutate((db) => {
+    const drop = db.drops.find((item) => item.id === req.params.id);
+    if (!drop) fail(404, 'Photo introuvable.');
+    const streak = db.streaks.find((item) => item.id === drop.streakId);
+    if (!streak || !streak.memberIds.includes(req.user.id)) fail(404, 'Photo introuvable.');
+    if (drop.day !== today) fail(400, 'On ne réagit qu’à la photo du jour.');
+    if (drop.userId === req.user.id) fail(400, 'Réagis à la photo de quelqu’un d’autre.');
+    drop.reactions ||= [];
+    const index = drop.reactions.indexOf(req.user.id);
+    if (index >= 0) drop.reactions.splice(index, 1);
+    else drop.reactions.push(req.user.id);
+    return streak.id;
+  });
+  const db = load();
+  const streak = db.streaks.find((item) => item.id === streakId);
+  const ctx = context(db, streak, req.user.id, today);
+  res.json({ streak: { today, ...detail(ctx, summarize(ctx)) } });
 }));
 
 app.get('/api/media/:id', auth, (req, res) => {

@@ -18,6 +18,7 @@ const state = {
   blobKind: 'image',
   previewUrl: '',
   sending: false,
+  reacting: false,
   effect: 'none',
   collageUrl: '',
 };
@@ -223,8 +224,19 @@ function countBlock(streak) {
   return `<p class="count">${streak.count}</p><p class="count-unit">${unit}</p>`;
 }
 
-function polaroid(drop, name, lazy) {
-  const frame = drop
+function reactionLine(drop, allowTap) {
+  if (!drop?.id) return '';
+  const reactions = drop.reactions || [];
+  const you = reactions.some((item) => item.you);
+  const names = reactions.filter((item) => !item.you).map((item) => item.name);
+  const who = names.length ? `<span class="react-who">${esc(names.join(', '))}</span>` : '';
+  if (!allowTap) return who;
+  const label = you ? 'Réagi' : 'Réagir';
+  return `<button class="react" type="button" data-action="react" data-id="${drop.id}" aria-pressed="${you ? 'true' : 'false'}">${label}</button>${who}`;
+}
+
+function polaroid(drop, name, lazy, options = {}) {
+  const frame = drop?.id
     ? (() => {
       const kind = drop.kind === 'video' ? 'video' : 'image';
       const media = kind === 'video'
@@ -233,7 +245,8 @@ function polaroid(drop, name, lazy) {
       return `<div class="frame shot" data-action="open-media" data-id="${drop.id}" data-kind="${kind}" data-caption="${esc(drop.caption)}" role="button" tabindex="0" aria-label="Voir le dépôt de ${esc(name)}">${media}</div>`;
     })()
     : '<div class="frame is-empty"><span>En attente</span></div>';
-  return `<figure class="polaroid">${frame}<figcaption>${esc(name)}</figcaption></figure>`;
+  const line = reactionLine(drop, Boolean(options.react));
+  return `<figure class="polaroid">${frame}<figcaption><span class="who">${esc(name)}</span>${line}</figcaption></figure>`;
 }
 
 function renderHome() {
@@ -280,11 +293,18 @@ function cardHtml(streak) {
   const cta = streak.youPosted
     ? ''
     : `<button class="btn btn-primary" type="button" data-action="start-drop" data-id="${streak.id}">${streak.status === 'cold' ? 'Reprendre' : 'Déposer ma photo'}</button>`;
+  const shots = streak.recent || [];
+  const cover = shots.length > 1
+    ? `<div class="card-mosaic">${shots.map((shot) => `<img src="/api/media/${shot.id}" alt="Photo de ${esc(shot.name)}" draggable="false">`).join('')}</div>`
+    : streak.cover
+      ? `<img src="/api/media/${streak.cover}" alt="" draggable="false">`
+      : faceMarkup(streak.partner ? streak.partnerPhoto : streak.youPhoto, streak.label);
+  const rich = shots.length > 0 || Boolean(streak.cover);
   return `
-    <article class="card">
+    <article class="card${rich ? ' has-cover' : ' is-plain'}">
       <div class="card-hit" data-action="open-streak" data-id="${streak.id}" role="link" tabindex="0" aria-label="Ouvrir le groupe de ${esc(streak.label)}">
-        <div class="card-flame">${faceMarkup(streak.partner ? streak.partnerPhoto : streak.youPhoto, streak.label)}</div>
-        <div>
+        <div class="card-cover">${cover}</div>
+        <div class="card-copy">
           <p class="card-count">${esc(count)}</p>
           <h2>${esc(streak.label)}</h2>
           <p class="card-sub">${subline(streak)}</p>
@@ -497,6 +517,56 @@ async function openCollage(month, mode) {
   }
 }
 
+function calendarBlock(streak) {
+  const days = streak.month || [];
+  if (!days.length || !streak.today) return '';
+  const [year, month] = streak.today.split('-').map(Number);
+  const offset = (new Date(year, month - 1, 1).getDay() + 6) % 7;
+  const heads = ['lu', 'ma', 'me', 'je', 've', 'sa', 'di']
+    .map((label) => `<span class="cal-head">${label}</span>`)
+    .join('');
+  const blanks = Array.from({ length: offset }, () => '<span class="cal-blank"></span>').join('');
+  const cells = days.map((day) => {
+    const num = Number(String(day.day).slice(8));
+    const title = day.label ? ` title="${esc(day.label)}"` : '';
+    return `<span class="cal-day ${esc(day.state)}"${title}><span class="sr">${esc(day.label || '')}</span>${num}</span>`;
+  }).join('');
+  const record = streak.best > 0
+    ? `<p class="hint">Record : ${streak.best} ${streak.best > 1 ? 'jours' : 'jour'}</p>`
+    : '';
+  return `<aside class="cal">
+    <p class="eyebrow">${esc(monthLabel(streak.today.slice(0, 7)))}</p>
+    <div class="cal-grid">${heads}${blanks}${cells}</div>
+    ${record}
+    <p class="legend"><span class="key lit"></span> tout le monde <span class="key half"></span> en partie <span class="key missed"></span> manqué</p>
+  </aside>`;
+}
+
+function wallSource(streak, meId) {
+  const todayShots = (streak.members || []).filter((member) => member.drop?.id);
+  if (todayShots.length) {
+    return {
+      day: streak.today,
+      label: 'Aujourd’hui',
+      drops: todayShots.map((member) => ({
+        ...member.drop,
+        name: member.name,
+        react: member.id !== meId,
+      })),
+    };
+  }
+  for (const day of streak.history || []) {
+    const drops = (day.drops || []).filter((drop) => drop.id);
+    if (!drops.length) continue;
+    return {
+      day: day.day,
+      label: humanDay(day.day, streak.today),
+      drops: drops.map((drop) => ({ ...drop, react: false })),
+    };
+  }
+  return null;
+}
+
 function renderStreak() {
   const streak = state.detail;
   if (!streak) return;
@@ -504,11 +574,31 @@ function renderStreak() {
   byId('streak-heading').textContent = streak.label;
   const partnerName = streak.label;
   const prompt = streak.prompt;
-  const dots = streak.dots.map((dot) => (
-    `<li class="dot ${dot.state}" title="${esc(dot.label)}"><span class="sr">${esc(dot.label)}</span></li>`
-  )).join('');
-  const history = streak.history.length
-    ? `<p class="eyebrow block-title">Avant</p>${streak.history.map((day) => `
+  const meId = state.me?.id;
+  const todayMembers = streak.members || [
+    { name: 'Toi', drop: streak.youDrop, id: meId },
+    { name: partnerName, drop: streak.partnerDrop },
+  ];
+  const wall = wallSource(streak, meId);
+  const waiting = todayMembers.filter((member) => !member.drop?.id);
+  const todayLine = wall && wall.day === streak.today
+    ? ''
+    : `<div class="today-strip">${todayMembers.map((member) => (
+      `<span>${esc(member.name)} · ${member.posted ? 'déposé' : 'en attente'}</span>`
+    )).join('')}</div>`;
+  const wallHtml = wall
+    ? `<section class="memory-wall">
+        <p class="eyebrow">${esc(wall.label)}</p>
+        <div class="pair wall">
+          ${wall.drops.map((drop) => polaroid(drop, drop.name, false, { react: drop.react })).join('')}
+        </div>
+      </section>`
+    : waiting.length
+      ? `<div class="pair today">${waiting.map((member) => polaroid(null, member.name)).join('')}</div>`
+      : '';
+  const older = (streak.history || []).filter((day) => !wall || day.day !== wall.day);
+  const history = older.length
+    ? `<p class="eyebrow block-title">Avant</p>${older.map((day) => `
         <article class="memory">
           <header>
             <h3>${esc(humanDay(day.day, streak.today))}</h3>
@@ -519,37 +609,38 @@ function renderStreak() {
           </div>
         </article>
       `).join('')}`
-    : '<p class="hint end-note">Le premier souvenir s’ajoute demain, si la série tient.</p>';
-  const record = streak.best > streak.count && streak.best > 0
-    ? `<p class="hint">Record : ${streak.best} ${streak.best > 1 ? 'jours' : 'jour'}</p>`
-    : '';
+    : wall
+      ? ''
+      : '<p class="hint end-note">Le premier souvenir s’ajoute demain, si la série tient.</p>';
 
   setHtml(byId('streak-scroll'), `
-    <div class="hero ${streak.status}">
-      <div class="faces">
-        ${(streak.members || []).slice(0, 8).map((member) => faceMarkup(member.photo, member.name)).join('')}
+    <div class="streak-board">
+      <div class="today-block">
+        <div class="hero ${streak.status}">
+          <div class="faces">
+            ${(streak.members || []).slice(0, 8).map((member) => faceMarkup(member.photo, member.name)).join('')}
+          </div>
+          <div class="hero-copy">
+            ${countBlock(streak)}
+            <button class="code-chip" type="button" data-action="copy" data-copy="${esc(streak.code)}" aria-label="Copier le code">${esc(formatCode(streak.code))}</button>
+            <p class="status">${statusCopy(streak)}</p>
+          </div>
+        </div>
+        ${wallHtml}
+        ${todayLine}
       </div>
-      ${countBlock(streak)}
-      <button class="code-chip" type="button" data-action="copy" data-copy="${esc(streak.code)}" aria-label="Copier le code">${esc(formatCode(streak.code))}</button>
-      <p class="status">${statusCopy(streak)}</p>
-      ${record}
+      ${calendarBlock(streak)}
+      <div class="streak-rest">
+        <article class="task-card">
+          <p class="eyebrow">Tâche du jour</p>
+          <h2>${esc(prompt.title)}</h2>
+          <p>${esc(prompt.hint)}</p>
+          <p class="time" id="streak-time"></p>
+        </article>
+        ${collageBlock(streak)}
+        ${history}
+      </div>
     </div>
-    <div class="pair today">
-      ${(streak.members || [{ name: 'Toi', drop: streak.youDrop }, { name: partnerName, drop: streak.partnerDrop }])
-        .map((member) => polaroid(member.drop, member.name))
-        .join('')}
-    </div>
-    <article class="task-card">
-      <p class="eyebrow">Tâche du jour</p>
-      <h2>${esc(prompt.title)}</h2>
-      <p>${esc(prompt.hint)}</p>
-      <p class="time" id="streak-time"></p>
-    </article>
-    ${collageBlock(streak)}
-    <p class="eyebrow block-title">Les jours</p>
-    <ol class="dots">${dots}</ol>
-    <p class="legend"><span class="key lit"></span> tout le monde <span class="key half"></span> en partie <span class="key missed"></span> manqué</p>
-    ${history}
   `);
   const time = byId('streak-time');
   if (time) time.textContent = 'Avant minuit';
@@ -585,6 +676,20 @@ async function refreshDetail(noisy) {
       return;
     }
     if (noisy) toast(error.message);
+  }
+}
+
+async function reactTo(id) {
+  if (!/^[a-f0-9]{16}$/.test(id) || state.reacting) return;
+  state.reacting = true;
+  try {
+    const data = await api(`/api/drops/${id}/reaction`, { method: 'POST' });
+    state.detail = data.streak;
+    if (state.view === 'streak') renderStreak();
+  } catch (error) {
+    toast(error.message);
+  } finally {
+    state.reacting = false;
   }
 }
 
@@ -1129,6 +1234,7 @@ byId('app').addEventListener('click', (event) => {
   } else if (action === 'retake') retake();
   else if (action === 'send-drop') sendDrop();
   else if (action === 'open-media') openMedia(button.dataset.id, button.dataset.kind, button.dataset.caption || '');
+  else if (action === 'react') reactTo(button.dataset.id || '');
   else if (action === 'collage') openCollage(button.dataset.month, button.dataset.mode);
   else if (action === 'effect') {
     state.effect = button.dataset.effect || 'none';
